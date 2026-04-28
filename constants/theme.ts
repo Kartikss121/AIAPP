@@ -10,20 +10,36 @@ const tintColorDark = '#fff';
 
 export const Colors = {
   light: {
+    background: '#FFFFFF',
     text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    textMuted: '#687076',
+    card: '#F8F9FA',
+    border: 'rgba(0, 0, 0, 0.05)',
+    accent: '#1E40AF', // Dark Blue
+    icon: '#11181C',
+    iconMuted: '#8E8E9F',
+    gradientBg: ['#F3E8FF', '#FFFFFF'] as const,
+    tabBarBg: 'rgba(255, 255, 255, 0.85)',
+    tabBarItemActive: '#1C1C28',
+    tabBarItemActiveText: '#FFFFFF',
+    statusBarStyle: 'dark' as const,
+    error: '#EF4444',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    background: '#0B0714',
+    text: '#FFFFFF',
+    textMuted: '#8E8E9F',
+    card: '#1C1C28',
+    border: 'rgba(255, 255, 255, 0.1)',
+    accent: '#2563EB', // Dark Blue
+    icon: '#FFFFFF',
+    iconMuted: '#8E8E9F',
+    gradientBg: ['#090018ff', '#01001fff', '#02001aff', '#050019ff'] as const,
+    tabBarBg: 'rgba(28, 28, 40, 0.87)',
+    tabBarItemActive: '#FFFFFF',
+    tabBarItemActiveText: '#000000',
+    statusBarStyle: 'light' as const,
+    error: '#EF4444',
   },
 };
 
