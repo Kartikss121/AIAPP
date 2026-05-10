@@ -75,7 +75,8 @@
         {
           "photosPermission": "Allow Visionary AI to access your photos to create AI art."
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

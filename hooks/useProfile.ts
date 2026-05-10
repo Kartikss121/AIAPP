@@ -19,7 +19,7 @@ export const useProfile = () => {
   return useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
-      const token = await getToken();
+      const token = await getToken({ template: "fastapi" });
       if (!token) throw new Error('No token found');
 
       const response = await axios.get(`${API_URL}/profile`, {

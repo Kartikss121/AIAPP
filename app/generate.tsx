@@ -2,6 +2,7 @@ import { useCustomAlert } from '@/context/AlertContext';
 import { useGlobalRewardedAd } from '@/context/RewardedAdContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useGenerateImage } from '@/hooks/useGenerateImage';
+import { useGenerateVideo } from '@/hooks/useGenerateVideo';
 import { useProfile } from '@/hooks/useProfile';
 import { useAuth } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +17,34 @@ import * as MediaLibrary from 'expo-media-library';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import LottieView from 'lottie-react-native';
+
+const FORBIDDEN_WORDS = [
+  // Nudity & Sexual Content
+  "nude", "naked", "sex", "porn", "nsfw", "erotica", "penetration", "masturbation", 
+  "orgasm", "ejaculation", "cum", "pussy", "dick", "cock", "vagina", "penis",
+  "boobs", "tits", "breasts", "nipples", "asshole", "blowjob", "handjob", 
+  "incest", "pedophile", "rape", "nonconsensual", "slut", "whore", "escort",
+  "undress", "strip", "unclothe", "remove clothes", "take off clothes", "without clothes", "no clothes", "remove cloths",
+  "lingerie", "bikini", "cleavage", "cameltoe", "see-through", "transparent clothes", "bdsm", "bondage", "fetish", "milf", "thong", "panties", "underwear", "jailbait", "loli", "shota",
+  
+  // Violence & Gore
+  "gore", "dismemberment", "decapitation", "mutilation", "blood spill", 
+  "gushing blood", "guts", "intestines", "torture", "massacre", "slaughter",
+  "snuff", "execution", "lynching", "cruelty", "blood bath", "decapitate", "stabbing", "shooting", "murder", "assassinate",
+  
+  // Self-Harm
+  "suicide", "kill myself", "cut myself", "self-harm", "anorexia", "bulimia",
+  
+  // Hate Speech & Harassment
+  "nigger", "faggot", "dyke", "tranny", "chink", "spic", "gook", "kike", 
+  "retard", "supremacist", "nazism", "hitler", "kkk", "holocaust", "terrorist",
+  
+  // Illegal Acts
+  "child abuse", "cp", "child porn", "meth", "heroin", "cocaine", "fentanyl", "bomb making", 
+  "how to make a bomb", "assassination", "weed", "marijuana", "lsd", "acid", "shrooms", "magic mushrooms"
+];
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -176,6 +204,46 @@ const ART_STYLES = [
     color: '#EAB308',
     image: require('../assets/images/pop_portrait.png'),
     promptBuilder: (input: string) => `Pop art style ${input}. Andy Warhol inspired, vibrant contrasting colors, Ben-Day dots, comic book style halftone patterns. Bold black outlines, retro 1960s pop culture vibe.`
+  },
+  {
+    id: 'toon_3d',
+    label: '3D Toon',
+    emoji: '🧸',
+    color: '#8B5CF6',
+    image: require('../assets/images/toon_3d.png'),
+    promptBuilder: (input: string) => `3D cartoon style of ${input}. Pixar aesthetic, soft smooth lighting, vibrant colors, expressive features. High quality 3D render.`
+  },
+  {
+    id: 'manga',
+    label: 'Manga',
+    emoji: '📖',
+    color: '#1F2937',
+    image: require('../assets/images/anime_boy_1777107534204.png'),
+    promptBuilder: (input: string) => `Manga style drawing of ${input}. Black and white ink, screentones, dramatic shading, detailed line art. Japanese comic aesthetic.`
+  },
+  {
+    id: 'landscape',
+    label: 'Landscape',
+    emoji: '🏞️',
+    color: '#10B981',
+    image: require('../assets/images/fantasy_landscape_1777107572320.png'),
+    promptBuilder: (input: string) => `Breathtaking landscape of ${input}. Scenic view, dramatic lighting, highly detailed environment. Epic scale, beautiful lighting.`
+  },
+  {
+    id: 'mecha',
+    label: 'Mecha',
+    emoji: '🤖',
+    color: '#3B82F6',
+    image: require('../assets/images/mecha_girl_1777107587543.png'),
+    promptBuilder: (input: string) => `Mecha robot style ${input}. Futuristic armor, intricate mechanical details, glowing neon accents, cyberpunk machinery. High-tech sci-fi design.`
+  },
+  {
+    id: 'neon_glow',
+    label: 'Neon Glow',
+    emoji: '💫',
+    color: '#EC4899',
+    image: require('../assets/images/neon_city_1777107555700.png'),
+    promptBuilder: (input: string) => `Neon glow style of ${input}. Vibrant glowing neon lights, dark background, high contrast, synthwave aesthetic, colorful luminescent details.`
   }
 ];
 
@@ -187,8 +255,8 @@ const QUALITY_OPTIONS = [
 ];
 
 // Safe helper to create a clean path
-const getLocalUri = () => {
-  return `${FileSystem.cacheDirectory}logixa_capture_${Date.now()}.jpg`;
+const getLocalUri = (isVideo: boolean = false) => {
+  return `${FileSystem.cacheDirectory}logixa_capture_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`;
 };
 
 export default function GenerateScreen() {
@@ -196,15 +264,26 @@ export default function GenerateScreen() {
   const MOCK_MODE = false; // 🔴 SET TO FALSE TO USE REAL API
   const { colors, activeTheme } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ prompt?: string; style?: string; image?: string }>();
-  const { mutate: generateReal, isPending: isPendingReal, data: resultData, error } = useGenerateImage();
+  const params = useLocalSearchParams<{ prompt?: string; style?: string; image?: string; action?: string }>();
+  const { mutate: generateReal, isPending: isPendingReal, data: resultData, error, reset: resetReal } = useGenerateImage();
+  const { mutate: generateVideoReal, isPending: isVideoPendingReal, data: resultVideoData, error: videoError, reset: resetVideoReal } = useGenerateVideo();
   const { data: profile, refetch: refetchProfile } = useProfile();
   const { getToken } = useAuth();
   const [mockImage, setMockImage] = useState<string | null>(null);
   const [mockPending, setMockPending] = useState(false);
 
+  const [mode, setMode] = useState<'image' | 'video'>('image');
+  const [videoDuration, setVideoDuration] = useState<number>(5);
+  const [enableAudio, setEnableAudio] = useState<boolean>(false);
+
   const resultImage = MOCK_MODE ? mockImage : resultData;
-  const isPending = MOCK_MODE ? mockPending : isPendingReal;
+  const resultVideo = resultVideoData;
+  const isPending = MOCK_MODE ? mockPending : (mode === 'image' ? isPendingReal : isVideoPendingReal);
+
+  const player = useVideoPlayer(resultVideo, player => {
+    player.loop = true;
+    player.play();
+  });
 
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth();
   const queryClient = useQueryClient();
@@ -305,6 +384,14 @@ export default function GenerateScreen() {
     }
   };
 
+  useEffect(() => {
+    if (params.action === 'edit' && !sourceImage && !resultImage && !isPending) {
+      setTimeout(() => {
+        pickImage();
+      }, 500);
+    }
+  }, [params.action]);
+
   const ratioDimensions = useMemo(() => {
     switch (selectedRatio) {
       case '1:1': return { width: 1024, height: 1024 };
@@ -317,20 +404,38 @@ export default function GenerateScreen() {
     }
   }, [selectedRatio]);
 
-  const activeStyleConfig = ART_STYLES.find(s => s.id === selectedStyle);
+  const activeStyleConfig = ALL_ART_STYLES.find(s => s.id === selectedStyle);
 
   const handleGenerate = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    if (!prompt.trim()) {
+
+    // Frontend safety check before doing anything else
+    if (prompt) {
+      const cleanPrompt = prompt.toLowerCase().replace(/[^\w\s]/g, '');
+      const words = new Set(cleanPrompt.split(/\s+/));
+      for (const word of FORBIDDEN_WORDS) {
+        if (words.has(word) || (word.includes(' ') && cleanPrompt.includes(word))) {
+          showAlert({
+            title: 'Safety Violation',
+            message: 'Your prompt contains inappropriate content that violates our community guidelines.',
+            type: 'error',
+          });
+          return;
+        }
+      }
+    }
+
+    if (!prompt.trim() && !selectedStyle) {
       showAlert({
         title: 'Missing Prompt',
-        message: 'Please enter a description for your image.',
+        message: 'Please enter a description or select a style for your image.',
         type: 'warning',
       });
       return;
     }
 
-    if (profile && profile.credits < 1) {
+    const requiredCredits = mode === 'video' ? 5 : 1;
+    if (profile && profile.credits < requiredCredits) {
       if (profile.ads_watched_today >= 5) {
         showAlert({
           title: 'Daily Limit Reached',
@@ -364,20 +469,32 @@ export default function GenerateScreen() {
       return;
     }
 
-    const styleObj = ART_STYLES.find(s => s.id === selectedStyle);
-    const fullPrompt = styleObj?.promptBuilder ? styleObj.promptBuilder(prompt) : prompt;
+    const styleObj = ALL_ART_STYLES.find(s => s.id === selectedStyle);
+    const basePrompt = prompt.trim() || (sourceImage ? 'identical subject and composition as the reference image' : 'a beautiful masterpiece');
+    const fullPrompt = styleObj?.promptBuilder ? styleObj.promptBuilder(basePrompt) : basePrompt;
 
     let source_url: string | undefined = undefined;
     if (sourceImage) {
       try {
-        const response = await fetch(sourceImage);
-        const blob = await response.blob();
-        source_url = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+        if (sourceImage.startsWith('http://') || sourceImage.startsWith('https://')) {
+          source_url = sourceImage;
+        } else {
+          const response = await fetch(sourceImage);
+          const blob = await response.blob();
+          source_url = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              let result = reader.result as string;
+              // Ensure mime type is supported if it defaults to application/octet-stream
+              if (result.startsWith('data:application/octet-stream')) {
+                result = result.replace('data:application/octet-stream', 'data:image/jpeg');
+              }
+              resolve(result);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }
       } catch (err) {
         console.error("Failed to read image as base64:", err);
         showAlert({
@@ -399,24 +516,77 @@ export default function GenerateScreen() {
       return;
     }
 
-    generateReal({
-      prompt: fullPrompt,
-      aspect_ratio: selectedRatio,
-      quality: selectedQuality === 'ultra' ? 'high' : selectedQuality === 'hd' ? 'medium' : 'low',
-      style: activeStyleConfig?.id !== 'none' ? activeStyleConfig?.label : undefined,
-      ...(source_url ? { source_url } : {})
-    }, {
-      onSuccess: () => {
-        refetchProfile();
-      }
-    });
+    if (mode === 'video') {
+      generateVideoReal({
+        prompt: fullPrompt,
+        aspect_ratio: selectedRatio,
+        duration: videoDuration,
+        audio: enableAudio,
+        ...(source_url ? { source_url } : {})
+      }, {
+        onSuccess: () => {
+          refetchProfile();
+        },
+        onError: (error: any) => {
+          const status = error?.response?.status;
+          if (status === 400) {
+            showAlert({
+              title: 'Safety Violation',
+              message: error?.response?.data?.detail || 'Your prompt contains inappropriate content that violates our community guidelines.',
+              type: 'error',
+            });
+          } else {
+            showAlert({
+              title: 'Generation Failed',
+              message: 'An error occurred while generating your video. Please try again.',
+              type: 'error',
+            });
+          }
+        }
+      });
+    } else {
+      generateReal({
+        prompt: fullPrompt,
+        aspect_ratio: selectedRatio,
+        quality: selectedQuality === 'ultra' ? 'high' : selectedQuality === 'hd' ? 'medium' : 'low',
+        style: activeStyleConfig?.id !== 'none' ? activeStyleConfig?.label : undefined,
+        ...(source_url ? { source_url } : {})
+      }, {
+        onSuccess: () => {
+          refetchProfile();
+        },
+        onError: (error: any) => {
+          const status = error?.response?.status;
+          if (status === 400) {
+            showAlert({
+              title: 'Safety Violation',
+              message: error?.response?.data?.detail || 'Your prompt contains inappropriate content that violates our community guidelines.',
+              type: 'error',
+            });
+          } else if (status === 402) {
+            showAlert({
+              title: 'Out of Credits',
+              message: 'You need credits to generate more art. Please watch an ad.',
+              type: 'warning',
+            });
+          } else {
+            showAlert({
+              title: 'Generation Failed',
+              message: 'An error occurred while generating your image. Please try again.',
+              type: 'error',
+            });
+          }
+        }
+      });
+    }
   };
 
   const handleSave = async () => {
-    if (!resultImage) {
+    const assetToSave = mode === 'video' ? resultVideo : resultImage;
+    if (!assetToSave) {
       showAlert({
         title: 'Error',
-        message: 'No image to save',
+        message: 'No media to save',
         type: 'error',
       });
       return;
@@ -430,18 +600,18 @@ export default function GenerateScreen() {
       if (status !== 'granted') {
         showAlert({
           title: 'Permission Required',
-          message: 'Gallery access is needed to save your AI art.',
+          message: 'Gallery access is needed to save your media.',
           type: 'warning',
         });
         setIsSaving(false);
         return;
       }
 
-      const localUri = getLocalUri();
+      const localUri = getLocalUri(mode === 'video');
 
       // Use the legacy downloadAsync
       const downloadResult = await FileSystem.downloadAsync(
-        resultImage,
+        assetToSave,
         localUri
       );
 
@@ -459,7 +629,7 @@ export default function GenerateScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showAlert({
         title: 'Saved',
-        message: 'Image saved to your Logixa AI album!',
+        message: 'Saved to your Logixa AI album!',
         type: 'success',
       });
     } catch (err: any) {
@@ -475,24 +645,25 @@ export default function GenerateScreen() {
   };
 
   const handleShare = async () => {
-    if (!resultImage) return;
+    const assetToShare = mode === 'video' ? resultVideo : resultImage;
+    if (!assetToShare) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const localUri = getLocalUri();
-      const downloadResult = await FileSystem.downloadAsync(resultImage, localUri);
+      const localUri = getLocalUri(mode === 'video');
+      const downloadResult = await FileSystem.downloadAsync(assetToShare, localUri);
 
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(downloadResult.uri, {
-          mimeType: 'image/jpeg',
-          dialogTitle: 'Share your AI Art',
+          mimeType: mode === 'video' ? 'video/mp4' : 'image/jpeg',
+          dialogTitle: 'Share your AI Creation',
         });
       }
     } catch (err) {
       console.error('Share error:', err);
       showAlert({
         title: 'Error',
-        message: 'Failed to share image.',
+        message: 'Failed to share media.',
         type: 'error',
       });
     }
@@ -506,8 +677,12 @@ export default function GenerateScreen() {
         {/* Header */}
         <Animated.View entering={FadeInDown.delay(100).duration(600).springify()} style={styles.header}>
           <View style={styles.headerTextContainer}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Create Magic <Text style={{ color: activeStyleConfig?.color || colors.accent }}>{activeStyleConfig?.emoji || '✨'}</Text></Text>
-            <Text style={[styles.headerSub, { color: colors.textMuted }]}>Turn your imagination into reality</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>
+              {params.action === 'edit' ? 'Edit Photo' : 'Create Magic'} <Text style={{ color: activeStyleConfig?.color || colors.accent }}>{activeStyleConfig?.emoji || '✨'}</Text>
+            </Text>
+            <Text style={[styles.headerSub, { color: colors.textMuted }]}>
+              {params.action === 'edit' ? 'Enhance & stylize your images' : 'Turn your imagination into reality'}
+            </Text>
           </View>
           <TouchableOpacity
             style={[styles.closeBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -536,7 +711,7 @@ export default function GenerateScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
           {/* Result Preview Area - Only shown when pending or generated */}
-          {(resultImage || isPending) && (
+          {(resultImage || resultVideo || isPending) && (
             <Animated.View entering={FadeInUp.duration(600).springify()} style={styles.resultContainer}>
               <View style={[
                 styles.resultCard,
@@ -560,16 +735,21 @@ export default function GenerateScreen() {
                 )}
 
                 {/* Success Result */}
-                {!isPending && resultImage && (
+                {!isPending && mode === 'image' && resultImage && (
                   <Animated.Image
                     entering={FadeInDown.duration(600)}
                     source={{ uri: resultImage }}
                     style={StyleSheet.absoluteFillObject}
                   />
                 )}
+                {!isPending && mode === 'video' && resultVideo && (
+                  <Animated.View entering={FadeInDown.duration(600)} style={StyleSheet.absoluteFillObject}>
+                    <VideoView player={player} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+                  </Animated.View>
+                )}
 
                 {/* Action Bar overlaid on image */}
-                {!isPending && resultImage && (
+                {!isPending && (resultImage || resultVideo) && (
                   <Animated.View entering={FadeInUp.delay(300).duration(500).springify()} style={[styles.actionOverlayWrapper, { borderColor: colors.border }]}>
                     <BlurView intensity={80} tint={activeTheme} style={styles.actionOverlay}>
                       <TouchableOpacity style={styles.iconBtn} onPress={handleSave} disabled={isSaving}>
@@ -579,6 +759,21 @@ export default function GenerateScreen() {
                           <Ionicons name="download-outline" size={20} color={colors.text} />
                         )}
                         <Text style={[styles.iconBtnText, { color: colors.text }]}>{isSaving ? 'Saving...' : 'Save'}</Text>
+                      </TouchableOpacity>
+                      <View style={[styles.actionDivider, { backgroundColor: colors.border }]} />
+                      <TouchableOpacity style={styles.iconBtn} onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        if (resultImage) {
+                          setSourceImage(resultImage);
+                        }
+                        if (MOCK_MODE) {
+                          setMockImage(null);
+                        } else {
+                          resetReal();
+                        }
+                      }}>
+                        <Ionicons name="color-wand-outline" size={20} color={colors.text} />
+                        <Text style={[styles.iconBtnText, { color: colors.text }]}>Edit</Text>
                       </TouchableOpacity>
                       <View style={[styles.actionDivider, { backgroundColor: colors.border }]} />
                       <TouchableOpacity style={styles.iconBtn} onPress={handleShare}>
@@ -591,6 +786,34 @@ export default function GenerateScreen() {
               </View>
             </Animated.View>
           )}
+
+          {/* Mode Toggle (Commented out for now) */}
+          {/*
+          <Animated.View entering={FadeInDown.delay(180).duration(600).springify()} style={styles.section}>
+            <View style={[styles.modeToggleContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <TouchableOpacity
+                style={[styles.modeToggleBtn, mode === 'image' && { backgroundColor: `${colors.accent}20` }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setMode('image');
+                }}
+              >
+                <Ionicons name="image-outline" size={18} color={mode === 'image' ? colors.accent : colors.textMuted} />
+                <Text style={[styles.modeToggleText, { color: mode === 'image' ? colors.accent : colors.textMuted }]}>Image</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeToggleBtn, mode === 'video' && { backgroundColor: `${colors.accent}20` }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setMode('video');
+                }}
+              >
+                <Ionicons name="videocam-outline" size={18} color={mode === 'video' ? colors.accent : colors.textMuted} />
+                <Text style={[styles.modeToggleText, { color: mode === 'video' ? colors.accent : colors.textMuted }]}>Video</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+          */}
 
           {/* Prompt Input */}
           <Animated.View entering={FadeInDown.delay(200).duration(600).springify()} style={styles.section}>
@@ -804,6 +1027,53 @@ export default function GenerateScreen() {
               })}
             </ScrollView>
           </Animated.View>
+
+          {/* Video Options */}
+          {mode === 'video' && (
+            <Animated.View entering={FadeInDown.delay(450).duration(600).springify()} style={styles.section}>
+              <Text style={[styles.sectionLabel, { color: colors.text }]}>Video Options</Text>
+              <View style={[styles.videoOptionsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.videoOptionRow}>
+                  <Text style={[styles.videoOptionLabel, { color: colors.text }]}>Duration</Text>
+                  <View style={styles.durationToggles}>
+                    {[2, 4].map((dur) => (
+                      <TouchableOpacity
+                        key={dur}
+                        style={[
+                          styles.durationBtn,
+                          videoDuration === dur && { backgroundColor: colors.accent }
+                        ]}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setVideoDuration(dur);
+                        }}
+                      >
+                        <Text style={[
+                          styles.durationBtnText,
+                          videoDuration === dur ? { color: '#FFF' } : { color: colors.textMuted }
+                        ]}>{dur}s</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+                <View style={[styles.videoOptionRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 12, marginTop: 12 }]}>
+                  <Text style={[styles.videoOptionLabel, { color: colors.text }]}>Enable Audio</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.audioToggleBtn,
+                      enableAudio ? { backgroundColor: colors.accent } : { backgroundColor: colors.border }
+                    ]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setEnableAudio(!enableAudio);
+                    }}
+                  >
+                    <View style={[styles.audioToggleKnob, enableAudio && styles.audioToggleKnobActive]} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Animated.View>
+          )}
 
           {/* Quality Options */}
           <Animated.View entering={FadeInDown.delay(500).duration(600).springify()} style={styles.section}>
@@ -1248,5 +1518,74 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Poppins_700Bold',
     letterSpacing: 0.5,
+  },
+  modeToggleContainer: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    padding: 4,
+    borderWidth: 1,
+    marginBottom: -10,
+  },
+  modeToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+  },
+  modeToggleText: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 14,
+  },
+  videoOptionsContainer: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+  },
+  videoOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  videoOptionLabel: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 15,
+  },
+  durationToggles: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  durationBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#333',
+  },
+  durationBtnText: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 13,
+  },
+  audioToggleBtn: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  audioToggleKnob: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  audioToggleKnobActive: {
+    transform: [{ translateX: 22 }],
   },
 });

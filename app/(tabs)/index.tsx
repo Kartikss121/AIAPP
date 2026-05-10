@@ -1,5 +1,6 @@
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -16,6 +17,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { Extrapolation, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
@@ -111,6 +114,27 @@ export default function HomeScreen() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const bannerRef = useRef<FlatList>(null);
 
+  const insets = useSafeAreaInsets();
+  const scrollY = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const headerAnimatedStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      scrollY.value,
+      [0, 80],
+      [0, 1],
+      Extrapolation.CLAMP
+    );
+    return {
+      opacity,
+    };
+  });
+
   const toggleExpandSection = (sectionId: string) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -127,11 +151,49 @@ export default function HomeScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={colors.statusBarStyle} />
 
+      {/* Animated Header Background */}
+      <Animated.View style={[
+        {
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: insets.top + 50,
+          zIndex: 10,
+        },
+        headerAnimatedStyle
+      ]}>
+        <BlurView intensity={80} tint={activeTheme === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFillObject} />
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.background, opacity: 0.9 }]} />
+      </Animated.View>
+
       <View style={styles.safeArea}>
-        {/* Header */}
+        {/* Header Content */}
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 5, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 11 }]}>
+          <Text style={[styles.logoText, { color: colors.text }]}>LOGIXA</Text>
+          <TouchableOpacity
+            style={styles.proHeaderBtn}
+            activeOpacity={0.8}
+            onPress={() => router.push('/premium')}
+          >
+            <LinearGradient
+              colors={['#FFD700', '#FDB931']}
+              style={styles.proHeaderGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Ionicons name="star" size={12} color="#000" />
+              <Text style={styles.proHeaderText}>PRO</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
 
-
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <Animated.ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+        >
           {/* Banner Carousel */}
           <View style={styles.bannerContainer}>
             <FlatList
@@ -198,7 +260,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             {/* Edit Photo Card */}
-            <TouchableOpacity style={styles.quickActionCard} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.quickActionCard} activeOpacity={0.8} onPress={() => router.navigate('/generate?action=edit')}>
               <LinearGradient
                 colors={['#0EA5E9', '#0284C7', '#0C4A6E']}
                 start={{ x: 0, y: 0 }}
@@ -254,7 +316,7 @@ export default function HomeScreen() {
 
           {/* Bottom spacing for tab bar */}
           <View style={{ height: 100 }} />
-        </ScrollView>
+        </Animated.ScrollView>
       </View>
     </View>
   );
@@ -285,6 +347,27 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Poppins_700Bold',
     letterSpacing: 3,
+  },
+  proHeaderBtn: {
+    shadowColor: '#FDB931',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  proHeaderGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  proHeaderText: {
+    color: '#000',
+    fontSize: 12,
+    fontFamily: 'Poppins_700Bold',
+    letterSpacing: 1,
   },
 
   // Banner

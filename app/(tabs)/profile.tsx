@@ -3,6 +3,7 @@ import { useProfile } from '@/hooks/useProfile';
 import { AD_UNIT_ID } from '@/utils/admob';
 import { useAuth, useClerk, useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
@@ -14,6 +15,7 @@ const adUnitId = AD_UNIT_ID;
 
 export default function ProfileScreen() {
   const { colors, activeTheme, mode, setMode } = useTheme();
+  const router = useRouter();
   const { signOut } = useClerk();
   const { user } = useUser();
   const { getToken } = useAuth();
@@ -175,7 +177,10 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>ACCOUNT SETTINGS</Text>
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <TouchableOpacity style={[styles.row, { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
+              <TouchableOpacity 
+                style={[styles.row, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+                onPress={() => router.push('/edit-profile')}
+              >
                 <View style={styles.rowLeft}>
                   <View style={[styles.iconWrap, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
                     <Ionicons name="person-outline" size={20} color="#3B82F6" />

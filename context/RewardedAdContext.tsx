@@ -72,9 +72,10 @@ export const RewardedAdProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         // 2. Backend Sync
         try {
-          const token = await getToken();
+          const token = await getToken({ template: 'fastapi' });
           const res = await axios.post(`${process.env.EXPO_PUBLIC_API_URL}/add-reward-credits`, {}, {
             headers: {
+              'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
               'ngrok-skip-browser-warning': '69420',
             }
