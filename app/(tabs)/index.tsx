@@ -147,6 +147,20 @@ export default function HomeScreen() {
     setActiveBanner(index);
   };
 
+  // Automatic Banner Scroll
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      let nextBanner = activeBanner + 1;
+      if (nextBanner >= BANNERS.length) {
+        nextBanner = 0;
+      }
+      bannerRef.current?.scrollToIndex({ index: nextBanner, animated: true });
+      setActiveBanner(nextBanner);
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [activeBanner]);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={colors.statusBarStyle} />
@@ -170,7 +184,7 @@ export default function HomeScreen() {
       <View style={styles.safeArea}>
         {/* Header Content */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 5, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 11 }]}>
-          <Text style={[styles.logoText, { color: colors.text }]}>LOGIXA</Text>
+          <Text style={[styles.logoText, { color: colors.text }]}></Text>
           <TouchableOpacity
             style={styles.proHeaderBtn}
             activeOpacity={0.8}
@@ -405,7 +419,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
     fontSize: 13,
     fontFamily: 'Poppins_400Regular',
-    marginTop: 2,
+    marginBottom: 8,
   },
   dotsContainer: {
     position: 'absolute',
