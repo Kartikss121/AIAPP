@@ -1,15 +1,16 @@
+import { useGlobalRewardedAd } from '@/context/RewardedAdContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useImageHistory, ImageHistoryItem } from '@/hooks/useImageHistory';
 import { useProfile } from '@/hooks/useProfile';
 import { AD_UNIT_ID } from '@/utils/admob';
 import { useAuth, useClerk, useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useGlobalRewardedAd } from '@/context/RewardedAdContext';
 
 const adUnitId = AD_UNIT_ID;
 
@@ -19,35 +20,41 @@ export default function ProfileScreen() {
   const { signOut } = useClerk();
   const { user } = useUser();
   const { getToken } = useAuth();
-  const { data: profile, refetch: refetchProfile } = useProfile();
+  const { data: profile, refetch: refetchProfile, isRefetching: isProfileRefetching } = useProfile();
+  const { data: history, isLoading: isHistoryLoading, refetch: refetchHistory, isRefetching: isHistoryRefetching } = useImageHistory();
   const { isLoaded, showAd, error } = useGlobalRewardedAd();
   const insets = useSafeAreaInsets();
 
-  const logToken = async () => {
-    try {
-      const token = await getToken();
-      console.log('--- DEBUG TOKEN ---');
-      console.log(token);
-      console.log('-------------------');
-    } catch (err) {
-      console.error('Failed to get token:', err);
-    }
-  };
+  const onRefresh = React.useCallback(() => {
+    refetchProfile();
+    refetchHistory();
+  }, [refetchProfile, refetchHistory]);
+
+  const refreshing = isProfileRefetching || isHistoryRefetching;
 
   const userEmail = user?.primaryEmailAddress?.emailAddress || 'No email provided';
   const userName = user?.fullName || user?.username || 'User';
   const userImage = user?.imageUrl;
 
+  const [selectedHistoryImage, setSelectedHistoryImage] = React.useState<ImageHistoryItem | null>(null);
+  const [showAllHistory, setShowAllHistory] = React.useState(false);
+
   const profileStats = [
-    { label: 'Images', value: '0', icon: 'image-outline' },
+    { label: 'Images', value: history?.length.toString() || '0', icon: 'image-outline' },
     { label: 'Credits', value: profile?.credits?.toString() || '-', icon: 'flash-outline' },
     { label: 'Joined', value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A', icon: 'calendar-outline' },
   ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+        }
+      >
+
         {/* Header Gradient */}
         <LinearGradient
           colors={['#4F1FE8', '#7C3AED', '#2D0F8F']}
@@ -99,7 +106,23 @@ export default function ProfileScreen() {
 
         {/* Body Content */}
         <View style={styles.bodyContent}>
-          
+
+          {/* Image History Access Button */}
+          <View style={styles.section}>
+            <TouchableOpacity 
+              style={[styles.historyButton, { backgroundColor: colors.accent }]}
+              onPress={() => setShowAllHistory(true)}
+            >
+              <View style={styles.historyButtonLeft}>
+                <View style={styles.historyIconCircle}>
+                  <Ionicons name="images" size={20} color="#FFF" />
+                </View>
+                <Text style={styles.historyButtonText}>My Image History</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          </View>
+
           {/* Appearance Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>APPEARANCE</Text>
@@ -177,7 +200,7 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>ACCOUNT SETTINGS</Text>
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.row, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
                 onPress={() => router.push('/edit-profile')}
               >
@@ -212,21 +235,6 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Developer Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>DEVELOPER</Text>
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <TouchableOpacity style={styles.row} onPress={logToken}>
-                <View style={styles.rowLeft}>
-                  <View style={[styles.iconWrap, { backgroundColor: 'rgba(107, 114, 128, 0.1)' }]}>
-                    <Ionicons name="code-working-outline" size={20} color="#6B7280" />
-                  </View>
-                  <Text style={[styles.rowText, { color: colors.text }]}>Log Session Token</Text>
-                </View>
-                <Ionicons name="terminal-outline" size={20} color={colors.iconMuted} />
-              </TouchableOpacity>
-            </View>
-          </View>
 
           {/* Danger Zone */}
           <View style={styles.section}>
@@ -253,6 +261,69 @@ export default function ProfileScreen() {
           <View style={{ height: 100 }} />
         </View>
       </ScrollView>
+
+      {/* Image Viewer Modal */}
+      <Modal
+        visible={!!selectedHistoryImage}
+        transparent={false}
+        animationType="fade"
+        onRequestClose={() => setSelectedHistoryImage(null)}
+      >
+        <View style={styles.simpleModalContainer}>
+          <TouchableOpacity 
+            style={styles.simpleModalClose}
+            onPress={() => setSelectedHistoryImage(null)}
+          >
+            <Ionicons name="close" size={32} color="#FFF" />
+          </TouchableOpacity>
+          
+          <Image 
+            source={{ uri: selectedHistoryImage?.url }} 
+            style={styles.simpleFullImage}
+            contentFit="contain"
+          />
+        </View>
+      </Modal>
+
+      {/* All History Modal */}
+      <Modal
+        visible={showAllHistory}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowAllHistory(false)}
+      >
+        <View style={[styles.fullHistoryContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.fullHistoryHeader, { paddingTop: insets.top + 10, borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setShowAllHistory(false)} style={styles.backButton}>
+              <Ionicons name="chevron-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.fullHistoryTitle, { color: colors.text }]}>All Generations</Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          <ScrollView 
+            contentContainerStyle={styles.fullHistoryGrid}
+            showsVerticalScrollIndicator={false}
+          >
+            {history?.map((item) => (
+              <TouchableOpacity 
+                key={item._id} 
+                style={styles.fullHistoryItem}
+                onPress={() => {
+                  setSelectedHistoryImage(item);
+                }}
+              >
+                <Image 
+                  source={{ uri: item.url }} 
+                  style={styles.historyImage}
+                  contentFit="cover"
+                  transition={200}
+                />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -347,14 +418,16 @@ const styles = StyleSheet.create({
   },
   statsRowNew: {
     flexDirection: 'row',
-    marginTop: 18,
+    marginTop: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    width: '85%',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 20,
-    paddingVertical: 8,
+    width: '90%',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 24,
+    paddingVertical: 12,
     paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   statBox: {
     flex: 1,
@@ -362,14 +435,15 @@ const styles = StyleSheet.create({
   },
   statNumber: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: 'Poppins_700Bold',
   },
   statLabelNew: {
     color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 10,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Poppins_500Medium',
     marginTop: 2,
+    textTransform: 'uppercase',
   },
   statDivider: {
     width: 1,
@@ -379,6 +453,127 @@ const styles = StyleSheet.create({
   bodyContent: {
     padding: 20,
     paddingTop: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  viewAllText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  historyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  historyButtonLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  historyIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  historyButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  historyContainer: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 12,
+    minHeight: 120,
+    justifyContent: 'center',
+  },
+  historyGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  historyItem: {
+    width: '48.5%', // Slightly less than 50% to account for gap
+    aspectRatio: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  historyImage: {
+    width: '100%',
+    height: '100%',
+  },
+  emptyHistory: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  emptyHistoryText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+  },
+  simpleModalContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  simpleModalClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 10,
+  },
+  simpleFullImage: {
+    width: '100%',
+    height: '100%',
+  },
+  fullHistoryContainer: {
+    flex: 1,
+  },
+  fullHistoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  fullHistoryTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_700Bold',
+  },
+  backButton: {
+    padding: 8,
+  },
+  fullHistoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 12,
+    gap: 10,
+  },
+  fullHistoryItem: {
+    width: '31%',
+    aspectRatio: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 8,
   },
   section: {
     marginBottom: 18,

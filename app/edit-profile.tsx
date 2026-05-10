@@ -1,21 +1,23 @@
 import { useTheme } from '@/context/ThemeContext';
+import { useDeleteAccount } from '@/hooks/useDeleteAccount';
 import { useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
-  Modal,
 } from 'react-native';
-import { useDeleteAccount } from '@/hooks/useDeleteAccount';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function EditProfileScreen() {
@@ -28,6 +30,7 @@ export default function EditProfileScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
+  const [profileImage, setProfileImage] = useState<string | null>(null);
 
   const isDark = activeTheme === 'dark';
   const { mutate: deleteAccountRequest, isPending: isDeleting } = useDeleteAccount();
@@ -55,6 +58,10 @@ export default function EditProfileScreen() {
     if (!user) return;
     setIsLoading(true);
     try {
+      if (profileImage && profileImage.startsWith('data:image')) {
+        await user.setProfileImage({ file: profileImage });
+      }
+
       await user.update({
         firstName,
         lastName,
@@ -66,6 +73,27 @@ export default function EditProfileScreen() {
       Alert.alert('Error', error.errors?.[0]?.longMessage || 'Failed to update profile');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleImagePick = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permission required', 'You need to allow access to your photos to upload a profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      setProfileImage(base64Image);
     }
   };
 
@@ -85,6 +113,19 @@ export default function EditProfileScreen() {
         style={styles.keyboardView}
       >
         <View style={styles.content}>
+          {/* Profile Picture */}
+          <View style={styles.avatarContainer}>
+            <Pressable onPress={handleImagePick} style={styles.avatarPressable}>
+              <Image
+                source={{ uri: profileImage || user?.imageUrl || 'https://via.placeholder.com/150' }}
+                style={styles.avatar}
+              />
+              <View style={[styles.editAvatarBadge, { backgroundColor: colors.accent }]}>
+                <Ionicons name="camera" size={16} color="#FFF" />
+              </View>
+            </Pressable>
+          </View>
+
           {/* First Name Input */}
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.text }]}>First Name</Text>
@@ -160,7 +201,7 @@ export default function EditProfileScreen() {
               <Ionicons name="alert-circle" size={28} color="#EF4444" />
               <Text style={[styles.modalTitle, { color: colors.text }]}>Delete Account</Text>
             </View>
-            
+
             <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
               Please tell us why you are leaving. An admin will review and process your request.
             </Text>
@@ -241,6 +282,30 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 24,
+  },
+  avatarContainer: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  avatarPressable: {
+    position: 'relative',
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  editAvatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFF',
   },
   inputGroup: {
     marginBottom: 20,

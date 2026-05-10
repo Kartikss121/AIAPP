@@ -519,6 +519,7 @@ export default function GenerateScreen() {
     if (mode === 'video') {
       generateVideoReal({
         prompt: fullPrompt,
+        original_prompt: basePrompt,
         aspect_ratio: selectedRatio,
         duration: videoDuration,
         audio: enableAudio,
@@ -526,6 +527,7 @@ export default function GenerateScreen() {
       }, {
         onSuccess: () => {
           refetchProfile();
+          queryClient.invalidateQueries({ queryKey: ['image-history'] });
         },
         onError: (error: any) => {
           const status = error?.response?.status;
@@ -547,6 +549,7 @@ export default function GenerateScreen() {
     } else {
       generateReal({
         prompt: fullPrompt,
+        original_prompt: basePrompt,
         aspect_ratio: selectedRatio,
         quality: selectedQuality === 'ultra' ? 'high' : selectedQuality === 'hd' ? 'medium' : 'low',
         style: activeStyleConfig?.id !== 'none' ? activeStyleConfig?.label : undefined,
@@ -554,6 +557,7 @@ export default function GenerateScreen() {
       }, {
         onSuccess: () => {
           refetchProfile();
+          queryClient.invalidateQueries({ queryKey: ['image-history'] });
         },
         onError: (error: any) => {
           const status = error?.response?.status;

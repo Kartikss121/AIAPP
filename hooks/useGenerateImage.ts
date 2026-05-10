@@ -11,6 +11,7 @@ export interface GenerateParams {
   quality: string;
   source_url?: string;
   strength?: number;
+  original_prompt?: string;
 }
 
 export const useGenerateImage = () => {

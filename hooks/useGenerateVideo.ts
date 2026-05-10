@@ -10,6 +10,7 @@ export interface GenerateVideoParams {
   duration?: number;
   audio?: boolean;
   source_url?: string;
+  original_prompt?: string;
 }
 
 export const useGenerateVideo = () => {
